@@ -1,0 +1,4 @@
+*.o
+train
+test_engine
+.DS_Store

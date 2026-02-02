@@ -47,8 +47,10 @@ Linearlayer* linear_create(int in_features, int out_features) {
 
 // Forward pass: y = x @ W + b
 Tensor* linear_forward(Linearlayer* layer, Tensor* x) {
-    Tensor* y = tensor_matmul(x, layer->W);
-    y = tensor_add(y, layer->b);
+    Tensor* matmul_out = tensor_matmul(x, layer->W);
+    Tensor* y = tensor_add(matmul_out, layer->b);
+    
+    tensor_release(matmul_out);
     return y;
 } 
 
@@ -59,4 +61,12 @@ Tensor** linear_params(Linearlayer* layer, int* n_params) {
     params[1] = layer->b;
     *n_params = 2;
     return params;
+}
+
+void linear_free(Linearlayer* layer) {
+    if (layer) {
+        tensor_release(layer->W);
+        tensor_release(layer->b);
+        free(layer);
+    }
 }

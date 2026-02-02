@@ -16,8 +16,11 @@ typedef struct Tensor {
     int* shape;       // shape array (e.g. [rows, cols])
     int size;         // total number of elements
 
+
     struct Tensor** parents;   // computation graph parents
     int n_parents;             // number of parents
+
+    int ref_count;             // Need to manage memory manually
 
     void (*backward)(struct Tensor*);   // backward function
 } Tensor;
@@ -27,6 +30,12 @@ typedef struct Tensor {
 //
 Tensor* tensor_create(float x);                 // scalar tensor
 Tensor* tensor_create_matrix(int rows, int cols);
+
+//
+// Memory management
+//
+void tensor_retain(Tensor* t);
+void tensor_release(Tensor* t);
 
 //
 // Core ops (forward)
@@ -48,6 +57,7 @@ void tensor_backward(Tensor* t);
 // Utility
 //
 void tensor_zero_grad(Tensor* t);
+void tensor_print(Tensor* t, char* name); // Added for debugging
 
 #endif
 

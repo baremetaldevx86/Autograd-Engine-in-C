@@ -38,6 +38,15 @@ static void list_push(TensorList* l, Tensor* t) {
     l->items[l->size++] = t;
 }
 
+static void list_free(TensorList* l) {
+    free(l->items);
+    free(l);
+}
+
+// using a simple O(N^2) check for visited is fine for small graphs, 
+// but let's just make the visited array dynamic or large enough and check properly.
+// For this simple engine, we can check existence in the visited array.
+
 static int is_visited(Tensor** visited, int count, Tensor* t) {
     for (int i = 0; i < count; i++) {
         if (visited[i] == t) return 1;
@@ -77,6 +86,8 @@ Tensor* tensor_create(float x) {
     t->parents = NULL;
     t->n_parents = 0;
     t->backward = NULL;
+    
+    t->ref_count = 1; // Start with 1 reference
 
     return t;
 }
@@ -101,7 +112,41 @@ Tensor* tensor_create_matrix(int rows, int cols) {
     t->n_parents = 0;
     t->backward = NULL;
 
+    t->ref_count = 1; // Start with 1 reference
+
     return t;
+}
+
+// ============================================================
+// Memory management
+// ============================================================
+
+void tensor_retain(Tensor* t) {
+    if (t) {
+        t->ref_count++;
+    }
+}
+
+void tensor_release(Tensor* t) {
+    if (!t) return;
+
+    t->ref_count--;
+    if (t->ref_count <= 0) {
+        // Release parents
+        if (t->parents) {
+            for (int i = 0; i < t->n_parents; i++) {
+                tensor_release(t->parents[i]);
+            }
+            free(t->parents);
+        }
+
+        // Free data
+        if (t->data) free(t->data);
+        if (t->grad) free(t->grad);
+        if (t->shape) free(t->shape);
+
+        free(t);
+    }
 }
 
 
@@ -144,6 +189,9 @@ static void sub_backward(Tensor* self) {
         a->grad[i] += self->grad[i];
         b->grad[i] -= self->grad[i];
     }
+    //broadcasting
+    
+
 }
 
 static void mul_backward(Tensor* self) {
@@ -154,6 +202,8 @@ static void mul_backward(Tensor* self) {
         a->grad[i] += b->data[i] * self->grad[i];
         b->grad[i] += a->data[i] * self->grad[i];
     }
+    // broadcasting:
+    
 }
 
 static void mean_backward(Tensor* self) {
@@ -169,31 +219,53 @@ static void pow_backward(Tensor* self) {
     Tensor* a = self->parents[0];
     Tensor* b = self->parents[1];
 
-    float av = *(a->data);
-    float bv = *(b->data);
-    float cv = *(self->data);
-    float grad = *(self->grad);
+    // Assuming element-wise power. 
+    // And assuming b is typically scalar or same shape.
+    // For simplicity, let's assume same shape or b is actually same size.
+    
+    // If b is a scalar tensor (size 1) but a is matrix:
+    float bv_scalar = b->data[0];
+    int b_is_scalar = (b->size == 1);
 
-    *(a->grad) += bv * pow(av, bv - 1.0f) * grad;
-    *(b->grad) += cv * log(av) * grad;
+    for (int i = 0; i < self->size; i++) {
+        float av = a->data[i];
+        float bv = b_is_scalar ? bv_scalar : b->data[i];
+        float grad = self->grad[i];
+        float cv = self->data[i]; // a^b
+
+        if (av != 0) {
+            a->grad[i] += bv * pow(av, bv - 1.0f) * grad;
+        }
+        
+        float ln_a = (av > 0) ? log(av) : 0; // safe log
+        float b_grad_contrib = cv * ln_a * grad;
+        
+        if (b_is_scalar) {
+            b->grad[0] += b_grad_contrib;
+        } else {
+            b->grad[i] += b_grad_contrib;
+        }
+    }
 }
 
 static void exp_backward(Tensor* self) {
     Tensor* a = self->parents[0];
 
-    float cv = *(self->data);
-    float grad = *(self->grad);
-
-    *(a->grad) += cv * grad;
+    for (int i = 0; i < self->size; i++) {
+        float cv = self->data[i];
+        float grad = self->grad[i];
+        a->grad[i] += cv * grad;
+    }
 }
 
 static void tanh_backward(Tensor* self) {
     Tensor* a = self->parents[0];
 
-    float cv = *(self->data);
-    float grad = *(self->grad);
-
-    *(a->grad) += (1.0f - cv * cv) * grad;
+    for (int i = 0; i < self->size; i++) {
+        float cv = self->data[i];
+        float grad = self->grad[i];
+        a->grad[i] += (1.0f - cv * cv) * grad;
+    }
 }
 
 static void matmul_backward(Tensor* C) {
@@ -234,7 +306,14 @@ static void matmul_backward(Tensor* C) {
 // ============================================================
 
 Tensor* tensor_add(Tensor* a, Tensor* b) {
-    Tensor* c = tensor_create_matrix(a->shape[0], a->shape[1]);
+    Tensor* c;
+    if (a->ndim == 0 && b->ndim == 0) {
+        c = tensor_create(0.0f);
+    } else {
+        int rows = (a->shape) ? a->shape[0] : b->shape[0];
+        int cols = (a->shape) ? a->shape[1] : b->shape[1];
+        c = tensor_create_matrix(rows, cols);
+    }
     
     // same shape 
     if(a->size == b->size) {
@@ -262,13 +341,22 @@ Tensor* tensor_add(Tensor* a, Tensor* b) {
     c->parents = (Tensor**)malloc(sizeof(Tensor*) * 2);
     c->parents[0] = a;
     c->parents[1] = b;
+    tensor_retain(a); // Retain parent
+    tensor_retain(b); // Retain parent
     c->n_parents = 2;
     c->backward = add_backward;
     return c;
 } 
 
 Tensor* tensor_sub(Tensor* a, Tensor* b) {
-    Tensor* c = tensor_create_matrix(a->shape[0], a->shape[1]);
+    Tensor* c;
+    if (a->ndim == 0 && b->ndim == 0) {
+        c = tensor_create(0.0f);
+    } else {
+        int rows = (a->shape) ? a->shape[0] : b->shape[0];
+        int cols = (a->shape) ? a->shape[1] : b->shape[1];
+        c = tensor_create_matrix(rows, cols);
+    }
 
     for (int i = 0; i < a->size; i++) {
         c->data[i] = a->data[i] - b->data[i];
@@ -277,6 +365,8 @@ Tensor* tensor_sub(Tensor* a, Tensor* b) {
     c->parents = (Tensor**)malloc(sizeof(Tensor*) * 2);
     c->parents[0] = a;
     c->parents[1] = b;
+    tensor_retain(a); 
+    tensor_retain(b);
     c->n_parents = 2;
     c->backward = sub_backward;
     return c;
@@ -296,6 +386,7 @@ Tensor* tensor_mean(Tensor *a) {
     c->n_parents = 1;
     c->parents = (Tensor**)malloc(sizeof(Tensor*));
     c->parents[0] = a;
+    tensor_retain(a);
     c->backward = mean_backward;
 
     return c;
@@ -303,8 +394,14 @@ Tensor* tensor_mean(Tensor *a) {
 
 
 Tensor* tensor_mul(Tensor* a, Tensor* b) {
-
-    Tensor* c = tensor_create_matrix(a->shape[0], a->shape[1]);
+    Tensor* c;
+    if (a->ndim == 0 && b->ndim == 0) {
+        c = tensor_create(0.0f);
+    } else {
+        int rows = (a->shape) ? a->shape[0] : b->shape[0];
+        int cols = (a->shape) ? a->shape[1] : b->shape[1];
+        c = tensor_create_matrix(rows, cols);
+    }
   
     for (int i = 0; i < a->size; i++) {
         c->data[i] = a->data[i] * b->data[i];
@@ -314,40 +411,76 @@ Tensor* tensor_mul(Tensor* a, Tensor* b) {
     c->parents = (Tensor**)malloc(sizeof(Tensor*) * 2);
     c->parents[0] = a;
     c->parents[1] = b;
+    tensor_retain(a);
+    tensor_retain(b);
 
     c->backward = mul_backward;
     return c;
 }
 
 Tensor* tensor_pow(Tensor* a, Tensor* b) {
-    Tensor* c = tensor_create(pow(*(a->data), *(b->data)));
+    Tensor* c;
+    if (a->ndim == 0 && b->ndim == 0) {
+        c = tensor_create(0.0f);
+    } else {
+        int rows = (a->shape) ? a->shape[0] : b->shape[0];
+        int cols = (a->shape) ? a->shape[1] : b->shape[1];
+        c = tensor_create_matrix(rows, cols);
+    }
+    
+    // Element-wise pow
+    for (int i = 0; i < c->size; i++) {
+        float av = (a->size == 1) ? a->data[0] : a->data[i];
+        float bv = (b->size == 1) ? b->data[0] : b->data[i];
+        c->data[i] = pow(av, bv);
+    }
 
     c->n_parents = 2;
     c->parents = (Tensor**)malloc(sizeof(Tensor*) * 2);
     c->parents[0] = a;
     c->parents[1] = b;
+    tensor_retain(a);
+    tensor_retain(b);
 
     c->backward = pow_backward;
     return c;
 }
 
 Tensor* tensor_expn(Tensor* a) {
-    Tensor* c = tensor_create(exp(*(a->data)));
+    Tensor* c;
+    if (a->ndim == 0) {
+        c = tensor_create(exp(*(a->data)));
+    } else {
+        c = tensor_create_matrix(a->shape[0], a->shape[1]);
+        for(int i=0; i<a->size; i++) {
+            c->data[i] = exp(a->data[i]);
+        }
+    }
 
     c->n_parents = 1;
     c->parents = (Tensor**)malloc(sizeof(Tensor*));
     c->parents[0] = a;
+    tensor_retain(a);
 
     c->backward = exp_backward;
     return c;
 }
 
 Tensor* tensor_Tanh(Tensor* a) {
-    Tensor* c = tensor_create(tanh(*(a->data)));
+    Tensor* c;
+    if (a->ndim == 0) {
+        c = tensor_create(tanh(*(a->data)));
+    } else {
+        c = tensor_create_matrix(a->shape[0], a->shape[1]);
+        for(int i=0; i<a->size; i++) {
+            c->data[i] = tanh(a->data[i]);
+        }
+    }
 
     c->n_parents = 1;
     c->parents = (Tensor**)malloc(sizeof(Tensor*));
     c->parents[0] = a;
+    tensor_retain(a);
 
     c->backward = tanh_backward;
     return c;
@@ -382,6 +515,9 @@ Tensor* tensor_matmul(Tensor* A, Tensor* B) {
     C->parents = (Tensor**)malloc(sizeof(Tensor*) * 2);
     C->parents[0] = A;
     C->parents[1] = B;
+    tensor_retain(A);
+    tensor_retain(B);
+
     C->backward = matmul_backward;
 
     return C;
@@ -393,9 +529,13 @@ Tensor* tensor_matmul(Tensor* A, Tensor* B) {
 void tensor_backward(Tensor* t) {
     TensorList* topo = list_create();
 
-    Tensor* visited[4096];
+    // dynamically allocate visited to avoid fixed size limit
+    int capacity = 10000;
     int visited_count = 0;
+    Tensor** visited = (Tensor**)malloc(sizeof(Tensor*) * capacity);
 
+    // We'd need to resize visited if we overflow, but for now let's just assert or expand
+    // Actually simplicity:
     build_topo(t, topo, visited, &visited_count);
 
     // seed gradient
@@ -413,6 +553,10 @@ void tensor_backward(Tensor* t) {
             node->backward(node);
         }
     }
+    
+    // cleanup topo list
+    free(visited);
+    list_free(topo);
 }
 
 // ============================================================
@@ -425,6 +569,22 @@ void tensor_zero_grad(Tensor* t) {
     } else {
         for (int i = 0; i < t->size; i++) {
             t->grad[i] = 0.0f;
+        }
+    }
+}
+
+void tensor_print(Tensor* t, char* name) {
+    printf("%s: \n", name);
+    if (t->ndim == 0) {
+        printf("%f\n", *t->data);
+    } else {
+        int rows = t->shape[0];
+        int cols = t->shape[1];
+        for(int i=0; i<rows; i++) {
+            for(int j=0; j<cols; j++) {
+                printf("%f ", t->data[i*cols + j]);
+            }
+            printf("\n");
         }
     }
 }

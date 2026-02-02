@@ -3,7 +3,13 @@
 
 Tensor* mse_loss(Tensor* y_pred, Tensor* y_true) {
     Tensor* diff = tensor_sub(y_pred, y_true); 
-    Tensor* loss = tensor_mean(tensor_mul(diff, diff));
+    Tensor* sq = tensor_mul(diff, diff);
+    Tensor* loss = tensor_mean(sq);
+    
+    // Release local references to intermediates
+    tensor_release(diff);
+    tensor_release(sq);
+    
     return loss;
 }
 

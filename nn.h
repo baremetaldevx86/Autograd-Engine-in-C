@@ -18,6 +18,6 @@ Tensor* linear_forward(Linearlayer* layer, Tensor* x);
 
 // Access parameters (for optimizer)
 Tensor** linear_params(Linearlayer* layer, int* n_params);
+void linear_free(Linearlayer* layer);
 
 #endif
-

@@ -12,5 +12,6 @@ typedef struct {
 SGD* sgd_create(Tensor** params, int n_params, float lr);
 void sgd_step(SGD* opt);
 void sgd_zero_grad(SGD* opt);
+void sgd_free(SGD* opt);
 
 #endif

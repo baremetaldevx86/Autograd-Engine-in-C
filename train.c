@@ -57,6 +57,10 @@ int main() {
         if (epoch % 50 == 0) {
             printf("Epoch %d | Loss = %f\n", epoch, *(loss->data));
         }
+
+        // Release graph
+        tensor_release(y_pred);
+        tensor_release(loss);
     }
 
     // Final learned parameters
@@ -71,6 +75,14 @@ int main() {
 
     Tensor* pred = linear_forward(model, tx);
     printf("\nPrediction for x=10: %f (expected ~32)\n", pred->data[0]);
+
+    // Cleanup
+    tensor_release(tx);
+    tensor_release(pred);
+    tensor_release(X);
+    tensor_release(Y);
+    linear_free(model);
+    sgd_free(opt);
 
     return 0;
 }
