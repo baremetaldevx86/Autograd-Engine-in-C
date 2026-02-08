@@ -6,7 +6,8 @@ A lightweight, tensor-based autograd engine implemented in C. Supports dynamic c
 
 - **Tensors**: Scalar and Matrix support (2D).
 - **Autograd**: Reverse-mode automatic differentiation (Backpropagation).
-- **Operations**: Add, Sub, Mul, Pow, Exp, Tanh, MatMul.
+- **Operations**: Add, Sub, Mul, Pow, Exp, Tanh, ReLU, MatMul, CrossEntropy.
+- **Neural Nets**: Linear layers, MLP (Multi-Layer Perceptron).
 - **Memory Management**: Reference counting for efficient memory usage.
 - **Optimizer**: Stochastic Gradient Descent (SGD).
 
@@ -16,6 +17,21 @@ A lightweight, tensor-based autograd engine implemented in C. Supports dynamic c
 
 ```bash
 make
+make train_xor
+make train_mnist
+```
+
+### Example: Training MNIST
+
+1. Download MNIST dataset (http://yann.lecun.com/exdb/mnist/)
+2. Extract files to `data/` directory:
+   - `train-images-idx3-ubyte`
+   - `train-labels-idx1-ubyte`
+   - `t10k-images-idx3-ubyte`
+   - `t10k-labels-idx1-ubyte`
+3. Run training:
+```bash
+./train_mnist
 ```
 
 ### Example: Training a Linear Model

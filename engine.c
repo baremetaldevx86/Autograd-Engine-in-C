@@ -12,6 +12,7 @@ static void mul_backward(Tensor* self);
 static void pow_backward(Tensor* self);
 static void exp_backward(Tensor* self);
 static void tanh_backward(Tensor* self);
+static void relu_backward(Tensor* self);
 static void matmul_backward(Tensor* self);
 
 // -------------------- Dynamic list for topo -----------------
@@ -268,6 +269,16 @@ static void tanh_backward(Tensor* self) {
     }
 }
 
+static void relu_backward(Tensor* self) {
+    Tensor* a = self->parents[0];
+
+    for (int i = 0; i < self->size; i++) {
+        if (self->data[i] > 0) {
+            a->grad[i] += self->grad[i];
+        }
+    }
+}
+
 static void matmul_backward(Tensor* C) {
     Tensor* A = C->parents[0];
     Tensor* B = C->parents[1];
@@ -483,6 +494,28 @@ Tensor* tensor_Tanh(Tensor* a) {
     tensor_retain(a);
 
     c->backward = tanh_backward;
+    return c;
+}
+
+Tensor* tensor_relu(Tensor* a) {
+    Tensor* c;
+    if (a->ndim == 0) {
+        float v = *(a->data);
+        c = tensor_create(v > 0 ? v : 0.0f);
+    } else {
+        c = tensor_create_matrix(a->shape[0], a->shape[1]);
+        for(int i=0; i<a->size; i++) {
+            float v = a->data[i];
+            c->data[i] = (v > 0) ? v : 0.0f;
+        }
+    }
+
+    c->n_parents = 1;
+    c->parents = (Tensor**)malloc(sizeof(Tensor*));
+    c->parents[0] = a;
+    tensor_retain(a);
+
+    c->backward = relu_backward;
     return c;
 }
 

@@ -44,14 +44,22 @@ Tensor* tensor_add(Tensor* a, Tensor* b);
 Tensor* tensor_mul(Tensor* a, Tensor* b);
 Tensor* tensor_pow(Tensor* a, Tensor* b);
 Tensor* tensor_expn(Tensor* a);
+Tensor* tensor_relu(Tensor* a);
 Tensor* tensor_Tanh(Tensor* a);
 Tensor* tensor_matmul(Tensor* A, Tensor* B);
 Tensor* tensor_sub(Tensor* a, Tensor* b);
 Tensor* tensor_mean(Tensor* a);
+
 //
 // Backward engine
 //
 void tensor_backward(Tensor* t);
+
+//
+//Activation functions
+//
+Tensor* tensor_relu(Tensor* t);
+Tensor* tensor_softmax(Tensor* t);
 
 //
 // Utility

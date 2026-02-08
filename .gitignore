@@ -2,3 +2,7 @@
 train
 test_engine
 .DS_Store
+
+data/
+train_xor
+train_mnist
