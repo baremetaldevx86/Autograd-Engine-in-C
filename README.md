@@ -94,27 +94,6 @@ make clean
 
 ## Run
 
-### XOR
-
-Trains a 2-4-1 MLP with Tanh activations on the XOR problem using MSE loss. Converges in well under 5000 epochs.
-
-```bash
-./train_xor
-```
-
-```
-Training XOR with MLP (2->4->1)...
-Epoch 0, Loss: 0.254801
-Epoch 500, Loss: 0.006412
-...
-Optimization Finished!
-Predictions:
-In: [0, 0] Target: 0 Pred: 0.0183
-In: [0, 1] Target: 1 Pred: 0.9821
-In: [1, 0] Target: 1 Pred: 0.9819
-In: [1, 1] Target: 0 Pred: 0.0201
-```
-
 ### MNIST
 
 Trains a 784-256-128-10 MLP with ReLU activations on raw MNIST pixels. Cross-entropy loss with softmax, SGD, batched training.
@@ -136,9 +115,9 @@ Download from [yann.lecun.com/exdb/mnist](http://yann.lecun.com/exdb/mnist/) or 
 ```
 Loading MNIST data...
 Loaded MNIST data: 60000 train, 10000 test
-Model created. Parameters: 6
-Training for 20 epochs | batch=32 | lr=0.0100
-Epoch 1 [1850/1875] loss=0.3821 lr=0.01000
+Model created. Parameters: 235146
+Training for 20 epochs | batch=32 | lr=0.0200
+Epoch 1 [1850/1875] loss=2.6158 lr=0.02000
 ...
 Final Test Accuracy: ~95%
 ```
